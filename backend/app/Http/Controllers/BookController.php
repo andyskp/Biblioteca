@@ -20,7 +20,9 @@ class BookController extends Controller
 
     private function saveBooks($books)
     {
+        dd($books);
         Storage::put($this->path, json_encode($books, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
     }
 
     public function index()
