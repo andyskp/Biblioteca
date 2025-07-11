@@ -8,3 +8,4 @@ Route::get('/', function () {
 
 // Carga explícita de rutas API
 require base_path('routes/api.php');
+
