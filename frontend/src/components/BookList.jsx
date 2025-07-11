@@ -1,8 +1,10 @@
 // src/components/BookList.jsx
 import React, { useEffect, useState } from "react";
+import BookForm from "./BookForm";
 
 export default function BookList() {
   const [books, setBooks] = useState([]);
+  const [selectedBook, setSelectedBook] = useState(null);
 
   const fetchBooks = async () => {
     try {
@@ -25,18 +27,38 @@ export default function BookList() {
     }
   };
 
+  const handleBookAdded = (nuevoLibro) => {
+    setBooks([...books, nuevoLibro]);
+  };
+
+  const handleBookUpdated = (libroActualizado) => {
+    setBooks(
+      books.map((book) =>
+        book.id === libroActualizado.id ? libroActualizado : book
+      )
+    );
+    setSelectedBook(null); // Limpiar formulario después de editar
+  };
+
   useEffect(() => {
     fetchBooks();
   }, []);
 
   return (
     <>
-      <h2>📚 Lista de Libros</h2>
+      <h2>📚 Biblioteca Digital</h2>
+      <BookForm
+        onBookAdded={handleBookAdded}
+        onBookUpdated={handleBookUpdated}
+        selectedBook={selectedBook}
+      />
+      <h3>📚 Lista de Libros</h3>
       <ul>
         {books.map((book) => (
           <li key={book.id}>
             {book.title} — {book.author} ({book.genre}){" "}
             {book.available ? "✅ Disponible" : "❌ Prestado"}
+            <button onClick={() => setSelectedBook(book)}>Editar</button>
             <button onClick={() => eliminarLibro(book.id)}>Eliminar</button>
           </li>
         ))}
