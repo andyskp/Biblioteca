@@ -1,6 +1,7 @@
 // src/components/BookList.jsx
 import React, { useEffect, useState } from "react";
 import BookForm from "./BookForm";
+import "./BookList.css";
 
 export default function BookList() {
   const [books, setBooks] = useState([]);
@@ -37,7 +38,7 @@ export default function BookList() {
         book.id === libroActualizado.id ? libroActualizado : book
       )
     );
-    setSelectedBook(null); // Limpiar formulario después de editar
+    setSelectedBook(null);
   };
 
   useEffect(() => {
@@ -45,24 +46,27 @@ export default function BookList() {
   }, []);
 
   return (
-    <>
-      <h2>📚 Biblioteca Digital</h2>
+    <div className="book-list-container">
+      <h2 className="book-list-title">📚 Biblioteca Digital</h2>
       <BookForm
         onBookAdded={handleBookAdded}
         onBookUpdated={handleBookUpdated}
         selectedBook={selectedBook}
       />
-      <h3>📚 Lista de Libros</h3>
-      <ul>
+      <ul className="book-list">
         {books.map((book) => (
-          <li key={book.id}>
-            {book.title} — {book.author} ({book.genre}){" "}
-            {book.available ? "✅ Disponible" : "❌ Prestado"}
-            <button onClick={() => setSelectedBook(book)}>Editar</button>
-            <button onClick={() => eliminarLibro(book.id)}>Eliminar</button>
+          <li className="book-list-item" key={book.id}>
+            <span>
+              {book.title} — {book.author} ({book.genre}){" "}
+              {book.available ? "✅ Disponible" : "❌ Prestado"}
+            </span>
+            <div className="book-list-actions">
+              <button onClick={() => setSelectedBook(book)}>Editar</button>
+              <button onClick={() => eliminarLibro(book.id)}>Eliminar</button>
+            </div>
           </li>
         ))}
       </ul>
-    </>
+    </div>
   );
 }
