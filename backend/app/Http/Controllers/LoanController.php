@@ -4,111 +4,124 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class LoanController extends Controller
 {
-    private $path = 'loans.json';
-
-    private function loadLoans()
-    {
-        if (!Storage::exists($this->path)) {
-            return [];
-        }
-
-        return json_decode(Storage::get($this->path), true);
-    }
-
-    private function saveLoans($loans)
-    {
-        Storage::put($this->path, json_encode($loans, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-    }
+    protected $file = 'data/loans.json';
+    protected $booksFile = 'data/books.json';
 
     public function index()
     {
-        return response()->json($this->loadLoans());
+        $loans = $this->getLoans();
+        return response()->json($loans, 200);
     }
 
     public function store(Request $request)
     {
-        $loans = $this->loadLoans();
+        $loans = $this->getLoans();
+        $books = $this->getBooks();
 
+        $bookId = $request->input('book_id');
+        $userId = $request->input('user_id');
+
+        // Verificar disponibilidad
+        $bookKey = collect($books)->search(fn($b) => $b['id'] == $bookId);
+
+        if ($bookKey === false || $books[$bookKey]['available'] === false) {
+            return response()->json(['error' => 'Libro no disponible o no existe.'], 400);
+        }
+
+        // Crear préstamo
         $newLoan = [
-            'id' => count($loans) ? max(array_column($loans, 'id')) + 1 : 1,
-            'book_id' => $request->input('book_id'),
-            'user_name' => $request->input('user_name'),
-            'start_date' => $request->input('start_date'),
-            'end_date' => $request->input('end_date'),
-            'returned' => $request->input('returned', false),
+            'id'       => Str::uuid()->toString(),
+            'user_id'  => $userId,
+            'book_id'  => $bookId,
+            'date'     => now()->toDateString(),
+            'returned' => false
         ];
 
         $loans[] = $newLoan;
+
+        // Marcar libro como no disponible
+        $books[$bookKey]['available'] = false;
+
+        // Guardar cambios
         $this->saveLoans($loans);
+        $this->saveBooks($books);
 
         return response()->json($newLoan, 201);
     }
 
     public function show($id)
     {
-        $loans = $this->loadLoans();
-        $loan = collect($loans)->firstWhere('id', $id);
-
-        if (!$loan) {
-            return response()->json(['message' => 'Préstamo no encontrado'], 404);
-        }
-
-        return response()->json($loan);
+        $loan = collect($this->getLoans())->firstWhere('id', $id);
+        return $loan ? response()->json($loan, 200)
+                     : response()->json(['error' => 'Préstamo no encontrado'], 404);
     }
 
     public function update(Request $request, $id)
     {
-        $loans = $this->loadLoans();
-        $updated = false;
+        $loans = $this->getLoans();
+        $books = $this->getBooks();
 
-        foreach ($loans as &$loan) {
-            if ($loan['id'] == $id) {
-                $loan['book_id'] = $request->input('book_id', $loan['book_id']);
-                $loan['user_name'] = $request->input('user_name', $loan['user_name']);
-                $loan['start_date'] = $request->input('start_date', $loan['start_date']);
-                $loan['end_date'] = $request->input('end_date', $loan['end_date']);
-                $loan['returned'] = $request->input('returned', $loan['returned']);
-                $updated = true;
-                break;
+        $index = collect($loans)->search(fn($l) => $l['id'] == $id);
+
+        if ($index === false) {
+            return response()->json(['error' => 'Préstamo no encontrado'], 404);
+        }
+
+        // Actualizar datos
+        $loans[$index]['returned'] = $request->input('returned', $loans[$index]['returned']);
+
+        // Si se devolvió el libro, actualizar disponibilidad
+        if ($loans[$index]['returned']) {
+            $bookKey = collect($books)->search(fn($b) => $b['id'] == $loans[$index]['book_id']);
+            if ($bookKey !== false) {
+                $books[$bookKey]['available'] = true;
             }
         }
 
-        if (!$updated) {
-            return response()->json(['message' => 'Préstamo no encontrado'], 404);
-        }
-
         $this->saveLoans($loans);
-        return response()->json(['message' => 'Préstamo actualizado correctamente']);
+        $this->saveBooks($books);
+
+        return response()->json($loans[$index], 200);
     }
 
     public function destroy($id)
     {
-        $loans = $this->loadLoans();
-        $filtered = array_filter($loans, fn($loan) => $loan['id'] != $id);
+        $loans = $this->getLoans();
+        $filtered = array_filter($loans, fn($l) => $l['id'] != $id);
 
         if (count($loans) === count($filtered)) {
-            return response()->json(['message' => 'Préstamo no encontrado'], 404);
+            return response()->json(['error' => 'Préstamo no encontrado'], 404);
         }
 
         $this->saveLoans(array_values($filtered));
-        return response()->json(['message' => 'Préstamo eliminado correctamente']);
+        return response()->json(['message' => 'Préstamo eliminado'], 200);
     }
 
-    public function statistics()
+    private function getLoans()
     {
-        $loans = $this->loadLoans();
+        return file_exists(storage_path("app/{$this->file}"))
+            ? json_decode(file_get_contents(storage_path("app/{$this->file}")), true)
+            : [];
+    }
 
-        $total = count($loans);
-        $returned = count(array_filter($loans, fn($l) => $l['returned']));
-        $active = $total - $returned;
+    private function saveLoans($loans)
+    {
+        file_put_contents(storage_path("app/{$this->file}"), json_encode($loans, JSON_PRETTY_PRINT));
+    }
 
-        return response()->json([
-            'total_loans' => $total,
-            'returned_loans' => $returned,
-            'active_loans' => $active,
-        ]);
+    private function getBooks()
+    {
+        return file_exists(storage_path("app/{$this->booksFile}"))
+            ? json_decode(file_get_contents(storage_path("app/{$this->booksFile}")), true)
+            : [];
+    }
+
+    private function saveBooks($books)
+    {
+        file_put_contents(storage_path("app/{$this->booksFile}"), json_encode($books, JSON_PRETTY_PRINT));
     }
 }
